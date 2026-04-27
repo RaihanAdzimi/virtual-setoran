@@ -83,38 +83,51 @@ const App = () => {
   const [dosenInfo, setDosenInfo] = useState({ nama: "Dosen Verifikator", email: "" });
   const [progressCache, setProgressCache] = useState({});
 
+  // PROTEKSI 1: Cek array yang aman agar tidak crash
   const calculateProgress = useCallback((detailArray) => {
-    if (!detailArray || detailArray.length === 0) return 0;
-    const completed = detailArray.filter(item => item.sudah_setor).length;
+    if (!Array.isArray(detailArray) || detailArray.length === 0) return 0;
+    const completed = detailArray.filter(item => item?.sudah_setor).length;
     return Math.round((completed / detailArray.length) * 100);
   }, []);
 
   const syncAllProgress = useCallback(async (list, currentToken) => {
+    if (!Array.isArray(list)) return; // Cegah crash jika API error
     const updates = {};
     const promises = list.map(async (mhs) => {
-      const mhsNim = String(mhs.nim || mhs.nim_mhs || mhs.id);
+      if (!mhs) return;
+      const mhsNim = String(mhs.nim || mhs.nim_mhs || mhs.id || "");
+      if (!mhsNim) return;
       try {
         const res = await api.getSetoran(mhsNim, currentToken);
-        if (res.response && res.data?.setoran?.detail) {
+        if (res?.response && Array.isArray(res?.data?.setoran?.detail)) {
           updates[mhsNim] = calculateProgress(res.data.setoran.detail);
         }
-      } catch (e) { console.error("Gagal sync progres:", mhsNim); }
+      } catch (e) { console.warn("Gagal sync progres:", mhsNim); }
     });
     await Promise.all(promises);
     setProgressCache(prev => ({ ...prev, ...updates }));
   }, [calculateProgress]);
 
+  // PROTEKSI 2: Penanganan Data API Error yang aman
   const fetchMahasiswaBimbingan = useCallback(() => {
     if (!token) return;
     setLoadingBimbingan(true);
     api.getMahasiswaBimbingan(token)
       .then((res) => {
-        if (res.response === true) {
-          const list = res.data?.info_mahasiswa_pa?.daftar_mahasiswa || res.data || [];
+        if (res?.response === true) {
+          let list = res?.data?.info_mahasiswa_pa?.daftar_mahasiswa;
+          if (!Array.isArray(list)) list = Array.isArray(res?.data) ? res.data : [];
+          
           setMahasiswaBimbingan(list);
-          if (res.data.nama) setDosenInfo({ nama: res.data.nama, email: res.data.email });
+          if (res?.data?.nama) setDosenInfo({ nama: res.data.nama, email: res.data.email || "" });
           syncAllProgress(list, token);
+        } else {
+          setMahasiswaBimbingan([]);
         }
+      })
+      .catch((err) => {
+        console.error("API Fetch Error:", err);
+        setMahasiswaBimbingan([]);
       })
       .finally(() => setLoadingBimbingan(false));
   }, [token, syncAllProgress]);
@@ -137,7 +150,7 @@ const App = () => {
       setToken(res.access_token);
       showNotif("success", "Login Berhasil");
       setActiveTab('dashboard');
-    } catch { showNotif("error", "Kredensial salah"); }
+    } catch { showNotif("error", "Kredensial salah atau koneksi HP diblokir"); }
     finally { setIsLoading(false); }
   };
 
@@ -146,13 +159,15 @@ const App = () => {
     setIsLoading(true);
     try {
       const res = await api.getSetoran(targetNim, token);
-      if (res.response) {
+      if (res?.response) {
         setData(res.data);
         setActiveNim(targetNim);
-        const currentProg = calculateProgress(res.data.setoran.detail);
-        setProgressCache(prev => ({ ...prev, [targetNim]: currentProg }));
+        if (Array.isArray(res?.data?.setoran?.detail)) {
+          const currentProg = calculateProgress(res.data.setoran.detail);
+          setProgressCache(prev => ({ ...prev, [targetNim]: currentProg }));
+        }
         setActiveTab('input');
-        showNotif("success", `Data ${res.data.info.nama} dimuat`);
+        showNotif("success", `Data ${res?.data?.info?.nama || 'Mahasiswa'} dimuat`);
       } else { showNotif("error", "Mahasiswa tidak ditemukan"); }
     } catch { showNotif("error", "Gagal mengambil data"); }
     finally { setIsLoading(false); }
@@ -172,13 +187,15 @@ const App = () => {
     const payload = { data_setoran: selectedSurah, tgl_setoran: new Date().toISOString().split("T")[0] };
     try {
       const res = await api.simpanSetoran(activeNim, token, payload);
-      if (res.response) {
+      if (res?.response) {
         setSelectedSurah([]);
         const freshData = await api.getSetoran(activeNim, token);
-        if (freshData.response) {
+        if (freshData?.response) {
             setData(freshData.data);
-            const newProg = calculateProgress(freshData.data.setoran.detail);
-            setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
+            if (Array.isArray(freshData?.data?.setoran?.detail)) {
+              const newProg = calculateProgress(freshData.data.setoran.detail);
+              setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
+            }
         }
         showNotif("success", "Validasi disimpan");
       }
@@ -191,12 +208,14 @@ const App = () => {
     const payload = { data_setoran: [{ id: item.info_setoran.id, id_komponen_setoran: item.id, nama_komponen_setoran: item.nama }] };
     try {
       const res = await api.deleteSetoran(activeNim, token, payload);
-      if (res.response) {
+      if (res?.response) {
         const freshData = await api.getSetoran(activeNim, token);
-        if (freshData.response) {
+        if (freshData?.response) {
             setData(freshData.data);
-            const newProg = calculateProgress(freshData.data.setoran.detail);
-            setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
+            if (Array.isArray(freshData?.data?.setoran?.detail)) {
+              const newProg = calculateProgress(freshData.data.setoran.detail);
+              setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
+            }
         }
         showNotif("success", "Data dihapus");
       }
@@ -252,8 +271,9 @@ const App = () => {
     );
   }
 
+  // LAYOUT BARU: Menggunakan min-h-screen agar bisa scroll alami di HP
   return (
-    <div className="h-screen bg-[#F8F7FF] flex flex-col lg:flex-row font-sans overflow-hidden">
+    <div className="min-h-screen bg-[#F8F7FF] flex flex-col lg:flex-row font-sans">
       {notif && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-10 duration-300">
           <div className={`px-8 py-4 rounded-full shadow-2xl text-white font-black flex items-center gap-3 ${notif.type === 'success' ? 'bg-violet-600' : 'bg-rose-500'}`}>
@@ -263,34 +283,33 @@ const App = () => {
         </div>
       )}
 
-      {/* Sidebar */}
-      <aside className="lg:w-80 p-6 h-full">
-        <div className="bg-white h-full rounded-[3rem] shadow-sm border border-violet-50 flex flex-col p-8">
-          <div className="flex items-center gap-4 mb-14 shrink-0">
+      {/* Sidebar - Di HP akan menjadi blok menu di atas, di Laptop akan lengket di kiri */}
+      <aside className="lg:w-80 p-4 lg:p-6 lg:sticky lg:top-0 lg:h-screen shrink-0 z-20">
+        <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-sm border border-violet-50 flex flex-col p-5 lg:p-8 h-full">
+          <div className="flex items-center gap-4 mb-6 lg:mb-14 shrink-0">
             <div className="w-12 h-12 bg-violet-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-violet-100">V</div>
             <div>
               <span className="font-black text-xl tracking-tighter italic text-slate-800 block leading-none">V-SETORAN</span>
-              {/* REVISI: Sub-teks Virtual Setoran */}
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1 block">VIRTUAL SETORAN</span>
             </div>
           </div>
 
-          <nav className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-            <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutGrid />} label="Overview" />
-            <NavBtn active={activeTab === 'input'} onClick={() => setActiveTab('input')} icon={<Fingerprint />} label="Verifikasi" />
-            <NavBtn active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={<GraduationCap />} label="Students" />
+          <nav className="flex flex-row lg:flex-col gap-3 overflow-x-auto lg:overflow-visible pr-2 lg:pr-0 pb-2 lg:pb-0 custom-scrollbar shrink-0">
+            <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutGrid size={20}/>} label="Overview" />
+            <NavBtn active={activeTab === 'input'} onClick={() => setActiveTab('input')} icon={<Fingerprint size={20}/>} label="Verifikasi" />
+            <NavBtn active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={<GraduationCap size={20}/>} label="Students" />
           </nav>
 
-          <div className="mt-auto pt-6 shrink-0">
-            <button onClick={() => setToken("")} className="flex items-center gap-4 w-full p-5 text-slate-400 hover:text-rose-500 transition-all font-black text-sm border-t border-slate-50">
+          <div className="mt-4 lg:mt-auto pt-4 lg:pt-6 shrink-0 border-t border-slate-50">
+            <button onClick={() => setToken("")} className="flex items-center justify-center lg:justify-start gap-4 w-full p-4 lg:p-5 text-slate-400 hover:text-rose-500 transition-all font-black text-sm bg-slate-50 lg:bg-transparent rounded-2xl lg:rounded-none">
               <Power size={20} /> Logout
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 flex flex-col gap-6 overflow-hidden h-full">
+      {/* Main Content - Tidak ada lagi lock height, bebas scroll ke bawah di HP */}
+      <main className="flex-1 p-4 lg:p-6 flex flex-col gap-6 w-full max-w-full">
         <header className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-6 rounded-[2.5rem] border border-violet-50 shadow-sm shrink-0">
           <div className="flex items-center bg-slate-50 rounded-2xl px-6 py-4 w-full max-lg border-2 border-transparent focus-within:border-violet-100 focus-within:bg-white transition-all">
             <Search size={20} className="text-violet-300" />
@@ -304,27 +323,26 @@ const App = () => {
             />
           </div>
 
-          <div className="flex items-center gap-5 px-4">
-            <div className="text-right hidden sm:block">
+          <div className="flex items-center gap-5 px-4 justify-between md:justify-end w-full md:w-auto">
+            <div className="text-right">
               <p className="text-sm font-black text-slate-800">{dosenInfo.nama}</p>
               <p className="text-[10px] text-violet-400 font-black uppercase tracking-widest">Dosen Pembimbing</p>
             </div>
-            <div className="w-14 h-14 rounded-2xl bg-violet-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-violet-100">
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-violet-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-violet-100">
               {dosenInfo.nama.charAt(0)}
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        <div className="flex-1 space-y-6">
           {activeTab === 'dashboard' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-              <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-[3.5rem] p-14 text-white relative overflow-hidden shadow-2xl">
-                <BookMarked className="absolute -right-16 -bottom-16 opacity-10 rotate-12" size={400} />
-                <h2 className="text-5xl font-black mb-6 leading-tight">Sistem Validasi<br/>Hafalan Quran</h2>
-                {/* REVISI: Perubahan teks deskripsi */}
-                <p className="text-violet-100 text-xl max-w-lg font-medium">Monitoring progres bimbingan mahasiswa UIN SUSKA secara real-time dan terukur.</p>
+              <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-[3rem] lg:rounded-[3.5rem] p-8 lg:p-14 text-white relative overflow-hidden shadow-2xl">
+                <BookMarked className="absolute -right-16 -bottom-16 opacity-10 rotate-12" size={300} />
+                <h2 className="text-4xl lg:text-5xl font-black mb-4 lg:mb-6 leading-tight">Sistem Validasi<br/>Hafalan Quran</h2>
+                <p className="text-violet-100 text-lg lg:text-xl max-w-lg font-medium">Monitoring progres bimbingan mahasiswa UIN SUSKA secara real-time dan terukur.</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
                 <StatCard label="Total Bimbingan" value={mahasiswaBimbingan.length} icon={<GraduationCap />} />
                 <StatCard label="Sistem Status" value="Online" icon={<ShieldCheck />} color="text-emerald-500" />
                 <StatCard label="Target Prodi" value="Juz 30" icon={<Target />} />
@@ -334,17 +352,17 @@ const App = () => {
 
           {activeTab === 'input' && data && (
             <div className="space-y-8 animate-in fade-in zoom-in-95">
-              <div className="bg-white rounded-[3rem] p-10 border border-violet-50 shadow-sm">
-                <div className="flex flex-col xl:flex-row items-center justify-between gap-10">
-                  <div className="flex items-center gap-8">
-                    <div className="w-24 h-24 bg-violet-50 rounded-[2.5rem] flex items-center justify-center text-violet-600 font-black text-4xl border-4 border-white shadow-inner">
+              <div className="bg-white rounded-[2rem] lg:rounded-[3rem] p-6 lg:p-10 border border-violet-50 shadow-sm">
+                <div className="flex flex-col xl:flex-row items-center justify-between gap-8 lg:gap-10">
+                  <div className="flex flex-col md:flex-row items-center text-center md:text-left gap-6 lg:gap-8 w-full xl:w-auto">
+                    <div className="w-20 h-20 lg:w-24 lg:h-24 bg-violet-50 rounded-[2rem] lg:rounded-[2.5rem] flex items-center justify-center text-violet-600 font-black text-3xl lg:text-4xl border-4 border-white shadow-inner shrink-0">
                       {data.info.nama.charAt(0)}
                     </div>
                     <div>
-                      <h3 className="text-3xl font-black text-slate-900">{data.info.nama}</h3>
-                      <p className="text-slate-400 font-bold tracking-wider uppercase text-xs mt-1">NIM {data.info.nim} • Semester {data.info.semester}</p>
+                      <h3 className="text-2xl lg:text-3xl font-black text-slate-900">{data.info.nama}</h3>
+                      <p className="text-slate-400 font-bold tracking-wider uppercase text-[10px] lg:text-xs mt-1">NIM {data.info.nim} • Semester {data.info.semester}</p>
                       
-                      <div className="mt-5 w-64">
+                      <div className="mt-5 w-full md:w-64">
                         <div className="flex justify-between items-end mb-2">
                           <span className="text-[10px] font-black text-violet-500 uppercase tracking-widest">Current Progress</span>
                           <span className="text-xl font-black text-slate-800">{calculateProgress(data.setoran.detail)}%</span>
@@ -360,20 +378,20 @@ const App = () => {
                   </div>
                   
                   <div className="flex gap-4 w-full xl:w-auto">
-                    <button onClick={() => {setData(null); setActiveNim("");}} className="flex-1 xl:px-8 py-5 rounded-2xl font-black text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all uppercase text-xs tracking-widest">Reset</button>
+                    <button onClick={() => {setData(null); setActiveNim("");}} className="flex-1 xl:px-8 py-4 lg:py-5 rounded-2xl font-black text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all uppercase text-[10px] lg:text-xs tracking-widest">Reset</button>
                     <button 
                       onClick={handleSimpan}
                       disabled={selectedSurah.length === 0 || isLoading}
-                      className="flex-[2] xl:px-12 py-5 rounded-2xl font-black text-white bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-100 disabled:opacity-20 transition-all uppercase text-xs tracking-widest flex items-center justify-center gap-3"
+                      className="flex-[2] xl:px-12 py-4 lg:py-5 rounded-2xl font-black text-white bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-100 disabled:opacity-20 transition-all uppercase text-[10px] lg:text-xs tracking-widest flex items-center justify-center gap-3"
                     >
-                      {isLoading ? <RotateCw className="animate-spin" /> : `Simpan ${selectedSurah.length} Surah`}
+                      {isLoading ? <RotateCw className="animate-spin" size={16} /> : `Simpan ${selectedSurah.length} Surah`}
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-[3rem] border border-violet-50 overflow-hidden shadow-sm">
-                <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
+              <div className="bg-white rounded-[2rem] lg:rounded-[3rem] border border-violet-50 overflow-hidden shadow-sm">
+                <div className="p-6 lg:p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
                   <h4 className="font-black text-slate-800 flex items-center gap-3"><Filter size={18} className="text-violet-500"/> Komponen Hafalan</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-px bg-slate-100">
@@ -381,10 +399,10 @@ const App = () => {
                     <div 
                       key={item.id}
                       onClick={() => !item.sudah_setor && handleSelectSurah(item)}
-                      className={`p-7 bg-white flex items-center justify-between transition-all group ${item.sudah_setor ? 'cursor-default' : 'cursor-pointer hover:bg-violet-50/50'}`}
+                      className={`p-6 lg:p-7 bg-white flex items-center justify-between transition-all group ${item.sudah_setor ? 'cursor-default' : 'cursor-pointer hover:bg-violet-50/50'}`}
                     >
-                      <div className="flex items-center gap-5">
-                        <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all duration-300 ${
+                      <div className="flex items-center gap-4 lg:gap-5">
+                        <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all duration-300 shrink-0 ${
                           item.sudah_setor ? 'bg-emerald-500 border-emerald-500 text-white' : 
                           selectedSurah.some(s => s.id_komponen_setoran === item.id) ? 'bg-violet-600 border-violet-600 text-white scale-110 shadow-lg shadow-violet-200' : 'border-slate-200'
                         }`}>
@@ -409,19 +427,20 @@ const App = () => {
 
           {activeTab === 'data' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-              <div className="flex items-center justify-between px-6">
-                <h3 className="text-2xl font-black text-slate-800">Daftar Mahasiswa PA</h3>
-                <button onClick={fetchMahasiswaBimbingan} className="p-4 bg-white border border-violet-50 rounded-2xl text-violet-600 hover:shadow-lg transition-all">
+              <div className="flex items-center justify-between px-2 lg:px-6">
+                <h3 className="text-xl lg:text-2xl font-black text-slate-800">Daftar Mahasiswa PA</h3>
+                <button onClick={fetchMahasiswaBimbingan} className="p-3 lg:p-4 bg-white border border-violet-50 rounded-xl lg:rounded-2xl text-violet-600 hover:shadow-lg transition-all">
                   <RotateCw size={20} className={loadingBimbingan ? 'animate-spin' : ''} />
                 </button>
               </div>
 
               {loadingBimbingan && mahasiswaBimbingan.length === 0 ? (
-                <div className="p-32 text-center text-slate-300 font-black uppercase text-xs">Syncing Database...</div>
+                <div className="p-20 lg:p-32 text-center text-slate-300 font-black uppercase text-xs">Loading Data...</div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-8 pb-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6 lg:gap-8 pb-10">
                   {mahasiswaBimbingan.map((mhs) => {
-                    const nimMhs = String(mhs.nim || mhs.nim_mhs || mhs.id);
+                    const nimMhs = String(mhs?.nim || mhs?.nim_mhs || mhs?.id || "");
+                    if (!nimMhs) return null;
                     const nameMhs = mhs.nama || mhs.nm_mhs || "Mahasiswa";
                     const displayProgress = progressCache[nimMhs] || 0;
 
@@ -429,10 +448,10 @@ const App = () => {
                       <div 
                         key={nimMhs}
                         onClick={() => handleGetData(nimMhs)}
-                        className="bg-white p-8 rounded-[3rem] border border-violet-50 hover:shadow-2xl hover:shadow-violet-100 transition-all group cursor-pointer relative"
+                        className="bg-white p-6 lg:p-8 rounded-[2.5rem] lg:rounded-[3rem] border border-violet-50 hover:shadow-2xl hover:shadow-violet-100 transition-all group cursor-pointer relative"
                       >
                         <div className="flex justify-between items-start mb-6">
-                          <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center font-black text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-all duration-500">
+                          <div className="w-12 h-12 lg:w-14 lg:h-14 bg-slate-50 rounded-2xl flex items-center justify-center font-black text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-all duration-500">
                             {nameMhs.charAt(0)}
                           </div>
                           <ArrowUpRight size={22} className="text-slate-200 group-hover:text-violet-400 transition-all" />
@@ -464,21 +483,24 @@ const App = () => {
   );
 };
 
+// Komponen Navbar yang responsif (Horizontal di HP, Vertical di Laptop)
 const NavBtn = ({ active, onClick, icon, label }) => (
   <button 
     onClick={onClick}
-    className={`flex items-center gap-5 w-full p-5 rounded-2xl transition-all font-black text-sm shrink-0 ${active ? 'bg-violet-600 text-white shadow-xl shadow-violet-100' : 'text-slate-400 hover:bg-violet-50 hover:text-violet-600'}`}
+    className={`flex items-center justify-center lg:justify-start gap-3 lg:gap-5 px-5 py-4 lg:p-5 lg:w-full rounded-2xl transition-all font-black text-sm shrink-0 whitespace-nowrap ${active ? 'bg-violet-600 text-white shadow-xl shadow-violet-100' : 'text-slate-400 hover:bg-violet-50 hover:text-violet-600 bg-slate-50 lg:bg-transparent'}`}
   >
     {icon} {label}
   </button>
 );
 
 const StatCard = ({ label, value, icon, color = "text-slate-800" }) => (
-  <div className="bg-white p-8 rounded-[2.5rem] border border-violet-50 flex items-center gap-6 shadow-sm">
-    <div className="w-16 h-16 bg-violet-50 rounded-[1.5rem] flex items-center justify-center text-violet-600">{icon}</div>
+  <div className="bg-white p-6 lg:p-8 rounded-[2rem] lg:rounded-[2.5rem] border border-violet-50 flex items-center gap-6 shadow-sm">
+    <div className="w-14 h-14 lg:w-16 lg:h-16 bg-violet-50 rounded-[1.2rem] lg:rounded-[1.5rem] flex items-center justify-center text-violet-600 shrink-0">
+      {icon}
+    </div>
     <div>
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">{label}</p>
-      <p className={`text-2xl font-black ${color}`}>{value}</p>
+      <p className="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">{label}</p>
+      <p className={`text-xl lg:text-2xl font-black ${color}`}>{value}</p>
     </div>
   </div>
 );
