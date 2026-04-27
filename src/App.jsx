@@ -82,6 +82,9 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [dosenInfo, setDosenInfo] = useState({ nama: "Dosen Verifikator", email: "" });
   const [progressCache, setProgressCache] = useState({});
+  
+  // State baru untuk mengontrol kemunculan pop-up Modal Reset
+  const [showResetModal, setShowResetModal] = useState(false);
 
   const calculateProgress = useCallback((detailArray) => {
     if (!Array.isArray(detailArray) || detailArray.length === 0) return 0;
@@ -220,12 +223,10 @@ const App = () => {
     } catch { showNotif("error", "Gagal menghapus"); }
   };
 
-  // FUNGSI BARU: Reset semua hafalan mahasiswa menjadi 0%
-  const handleResetAll = async () => {
-    const isConfirm = window.confirm("Apakah yakin untuk reset data hafalan ini? ya atau tidak");
-    if (!isConfirm) return;
-
-    // Cari semua surah yang sudah berstatus sudah_setor
+  // FUNGSI EKSEKUSI RESET (Dijalankan saat pencet "Ya" di Modal)
+  const executeResetAll = async () => {
+    setShowResetModal(false); // Tutup modal dulu
+    
     const itemsToDelete = data.setoran.detail.filter(item => item.sudah_setor);
     
     if (itemsToDelete.length === 0) {
@@ -234,7 +235,6 @@ const App = () => {
 
     setIsLoading(true);
     
-    // Siapkan semua ID surah yang mau dihapus secara masal
     const payload = {
       data_setoran: itemsToDelete.map((item) => ({
         id: item.info_setoran.id,
@@ -311,11 +311,41 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#F8F7FF] flex flex-col lg:flex-row font-sans">
+      {/* Notifikasi Toast */}
       {notif && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-10 duration-300">
           <div className={`px-8 py-4 rounded-full shadow-2xl text-white font-black flex items-center gap-3 ${notif.type === 'success' ? 'bg-violet-600' : 'bg-rose-500'}`}>
             {notif.type === 'success' ? <CheckCircle size={20} /> : <Info size={20} />}
             {notif.message}
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP MODAL CUSTOM UNTUK RESET */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-violet-100 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-500 mb-6 mx-auto">
+              <Info size={32} />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 text-center mb-2">Reset Hafalan?</h3>
+            <p className="text-sm text-slate-500 text-center mb-8 font-medium">
+              Apakah Anda yakin ingin mereset data hafalan ini? Semua progress akan kembali ke 0%.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowResetModal(false)}
+                className="flex-1 py-4 rounded-xl font-black text-slate-500 bg-slate-50 hover:bg-slate-100 transition-all uppercase text-[10px] tracking-widest"
+              >
+                Tidak
+              </button>
+              <button 
+                onClick={executeResetAll}
+                className="flex-1 py-4 rounded-xl font-black text-white bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all uppercase text-[10px] tracking-widest"
+              >
+                Ya, Reset
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -414,7 +444,6 @@ const App = () => {
                     </div>
                   </div>
                   
-                  {/* UPDATE TOMBOL: Ada Kembali, Reset, dan Simpan */}
                   <div className="flex gap-2 lg:gap-4 w-full xl:w-auto">
                     <button 
                       onClick={() => {setData(null); setActiveNim("");}} 
@@ -423,8 +452,9 @@ const App = () => {
                       Kembali
                     </button>
                     
+                    {/* TOMBOL INI SEKARANG MEMANGGIL CUSTOM MODAL */}
                     <button 
-                      onClick={handleResetAll}
+                      onClick={() => setShowResetModal(true)}
                       disabled={isLoading}
                       className="px-4 lg:px-6 py-4 lg:py-5 rounded-2xl font-black text-rose-500 bg-rose-50 hover:bg-rose-100 transition-all uppercase text-[10px] lg:text-xs tracking-widest"
                     >
