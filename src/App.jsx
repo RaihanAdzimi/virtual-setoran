@@ -83,7 +83,6 @@ const App = () => {
   const [dosenInfo, setDosenInfo] = useState({ nama: "Dosen Verifikator", email: "" });
   const [progressCache, setProgressCache] = useState({});
 
-  // PROTEKSI 1: Cek array yang aman agar tidak crash
   const calculateProgress = useCallback((detailArray) => {
     if (!Array.isArray(detailArray) || detailArray.length === 0) return 0;
     const completed = detailArray.filter(item => item?.sudah_setor).length;
@@ -91,7 +90,7 @@ const App = () => {
   }, []);
 
   const syncAllProgress = useCallback(async (list, currentToken) => {
-    if (!Array.isArray(list)) return; // Cegah crash jika API error
+    if (!Array.isArray(list)) return; 
     const updates = {};
     const promises = list.map(async (mhs) => {
       if (!mhs) return;
@@ -108,7 +107,6 @@ const App = () => {
     setProgressCache(prev => ({ ...prev, ...updates }));
   }, [calculateProgress]);
 
-  // PROTEKSI 2: Penanganan Data API Error yang aman
   const fetchMahasiswaBimbingan = useCallback(() => {
     if (!token) return;
     setLoadingBimbingan(true);
@@ -150,7 +148,7 @@ const App = () => {
       setToken(res.access_token);
       showNotif("success", "Login Berhasil");
       setActiveTab('dashboard');
-    } catch { showNotif("error", "Kredensial salah atau koneksi HP diblokir"); }
+    } catch { showNotif("error", "Kredensial salah"); }
     finally { setIsLoading(false); }
   };
 
@@ -222,6 +220,46 @@ const App = () => {
     } catch { showNotif("error", "Gagal menghapus"); }
   };
 
+  // FUNGSI BARU: Reset semua hafalan mahasiswa menjadi 0%
+  const handleResetAll = async () => {
+    const isConfirm = window.confirm("Apakah yakin untuk reset data hafalan ini? ya atau tidak");
+    if (!isConfirm) return;
+
+    // Cari semua surah yang sudah berstatus sudah_setor
+    const itemsToDelete = data.setoran.detail.filter(item => item.sudah_setor);
+    
+    if (itemsToDelete.length === 0) {
+      return showNotif("info", "Belum ada hafalan yang disetor (sudah 0%)");
+    }
+
+    setIsLoading(true);
+    
+    // Siapkan semua ID surah yang mau dihapus secara masal
+    const payload = {
+      data_setoran: itemsToDelete.map((item) => ({
+        id: item.info_setoran.id,
+        id_komponen_setoran: item.id,
+        nama_komponen_setoran: item.nama
+      }))
+    };
+
+    try {
+      const res = await api.deleteSetoran(activeNim, token, payload);
+      if (res?.response) {
+        const freshData = await api.getSetoran(activeNim, token);
+        if (freshData?.response) {
+            setData(freshData.data);
+            if (Array.isArray(freshData?.data?.setoran?.detail)) {
+              const newProg = calculateProgress(freshData.data.setoran.detail);
+              setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
+            }
+        }
+        showNotif("success", "Semua data hafalan berhasil direset ke 0%");
+      }
+    } catch { showNotif("error", "Gagal mereset data hafalan"); }
+    finally { setIsLoading(false); }
+  };
+
   if (!token) {
     return (
       <div className="min-h-screen bg-[#FDFCFE] flex items-center justify-center p-6">
@@ -271,7 +309,6 @@ const App = () => {
     );
   }
 
-  // LAYOUT BARU: Menggunakan min-h-screen agar bisa scroll alami di HP
   return (
     <div className="min-h-screen bg-[#F8F7FF] flex flex-col lg:flex-row font-sans">
       {notif && (
@@ -283,9 +320,9 @@ const App = () => {
         </div>
       )}
 
-      {/* Sidebar - Di HP akan menjadi blok menu di atas, di Laptop akan lengket di kiri */}
+      {/* Sidebar */}
       <aside className="lg:w-80 p-4 lg:p-6 lg:sticky lg:top-0 lg:h-screen shrink-0 z-20">
-        <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-sm border border-violet-50 flex flex-col p-5 lg:p-8 h-full">
+        <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-sm border border-violet-50 flex flex-col p-5 lg:p-8 h-auto lg:h-full">
           <div className="flex items-center gap-4 mb-6 lg:mb-14 shrink-0">
             <div className="w-12 h-12 bg-violet-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-violet-100">V</div>
             <div>
@@ -308,7 +345,7 @@ const App = () => {
         </div>
       </aside>
 
-      {/* Main Content - Tidak ada lagi lock height, bebas scroll ke bawah di HP */}
+      {/* Main Content */}
       <main className="flex-1 p-4 lg:p-6 flex flex-col gap-6 w-full max-w-full">
         <header className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-6 rounded-[2.5rem] border border-violet-50 shadow-sm shrink-0">
           <div className="flex items-center bg-slate-50 rounded-2xl px-6 py-4 w-full max-lg border-2 border-transparent focus-within:border-violet-100 focus-within:bg-white transition-all">
@@ -377,14 +414,29 @@ const App = () => {
                     </div>
                   </div>
                   
-                  <div className="flex gap-4 w-full xl:w-auto">
-                    <button onClick={() => {setData(null); setActiveNim("");}} className="flex-1 xl:px-8 py-4 lg:py-5 rounded-2xl font-black text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all uppercase text-[10px] lg:text-xs tracking-widest">Reset</button>
+                  {/* UPDATE TOMBOL: Ada Kembali, Reset, dan Simpan */}
+                  <div className="flex gap-2 lg:gap-4 w-full xl:w-auto">
+                    <button 
+                      onClick={() => {setData(null); setActiveNim("");}} 
+                      className="px-4 lg:px-6 py-4 lg:py-5 rounded-2xl font-black text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all uppercase text-[10px] lg:text-xs tracking-widest"
+                    >
+                      Kembali
+                    </button>
+                    
+                    <button 
+                      onClick={handleResetAll}
+                      disabled={isLoading}
+                      className="px-4 lg:px-6 py-4 lg:py-5 rounded-2xl font-black text-rose-500 bg-rose-50 hover:bg-rose-100 transition-all uppercase text-[10px] lg:text-xs tracking-widest"
+                    >
+                      Reset
+                    </button>
+
                     <button 
                       onClick={handleSimpan}
                       disabled={selectedSurah.length === 0 || isLoading}
-                      className="flex-[2] xl:px-12 py-4 lg:py-5 rounded-2xl font-black text-white bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-100 disabled:opacity-20 transition-all uppercase text-[10px] lg:text-xs tracking-widest flex items-center justify-center gap-3"
+                      className="flex-[2] xl:px-10 py-4 lg:py-5 rounded-2xl font-black text-white bg-emerald-500 hover:bg-emerald-600 shadow-xl shadow-emerald-100 disabled:opacity-20 transition-all uppercase text-[10px] lg:text-xs tracking-widest flex items-center justify-center gap-2 lg:gap-3"
                     >
-                      {isLoading ? <RotateCw className="animate-spin" size={16} /> : `Simpan ${selectedSurah.length} Surah`}
+                      {isLoading ? <RotateCw className="animate-spin" size={16} /> : `Simpan ${selectedSurah.length}`}
                     </button>
                   </div>
                 </div>
@@ -483,7 +535,6 @@ const App = () => {
   );
 };
 
-// Komponen Navbar yang responsif (Horizontal di HP, Vertical di Laptop)
 const NavBtn = ({ active, onClick, icon, label }) => (
   <button 
     onClick={onClick}
