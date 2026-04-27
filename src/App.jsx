@@ -467,7 +467,8 @@ const App = () => {
 
               <div className="bg-white rounded-[2rem] lg:rounded-[3rem] border border-violet-50 overflow-hidden shadow-sm">
                 <div className="p-6 lg:p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
-                  <h4 className="font-black text-slate-800 flex items-center gap-3"><Filter size={18} className="text-violet-500"/> Komponen Hafalan</h4>
+                  <h4 className="font-black text-slate-800 flex items-center gap-3"><Filter size={18} className="text-violet-500"/> Komponen Hafalan Salsabillah Amalia
+NIM 12350121680</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-px bg-slate-100">
                   {data.setoran.detail.map((item) => (
