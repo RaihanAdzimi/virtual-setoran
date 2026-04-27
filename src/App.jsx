@@ -83,7 +83,6 @@ const App = () => {
   const [dosenInfo, setDosenInfo] = useState({ nama: "Dosen Verifikator", email: "" });
   const [progressCache, setProgressCache] = useState({});
   
-  // State baru untuk mengontrol kemunculan pop-up Modal Reset
   const [showResetModal, setShowResetModal] = useState(false);
 
   const calculateProgress = useCallback((detailArray) => {
@@ -104,7 +103,7 @@ const App = () => {
         if (res?.response && Array.isArray(res?.data?.setoran?.detail)) {
           updates[mhsNim] = calculateProgress(res.data.setoran.detail);
         }
-      } catch (e) { console.warn("Gagal sync progres:", mhsNim); }
+      } catch (e) { console.warn("Gagal menyinkronkan progres:", mhsNim); }
     });
     await Promise.all(promises);
     setProgressCache(prev => ({ ...prev, ...updates }));
@@ -127,7 +126,7 @@ const App = () => {
         }
       })
       .catch((err) => {
-        console.error("API Fetch Error:", err);
+        console.error("Kesalahan mengambil API:", err);
         setMahasiswaBimbingan([]);
       })
       .finally(() => setLoadingBimbingan(false));
@@ -144,14 +143,14 @@ const App = () => {
   };
 
   const handleLogin = async () => {
-    if (!username || !password) return showNotif("error", "Isi email dan password");
+    if (!username || !password) return showNotif("error", "Harap isi email dan kata sandi");
     setIsLoading(true);
     try {
       const res = await api.login(username, password);
       setToken(res.access_token);
-      showNotif("success", "Login Berhasil");
+      showNotif("success", "Login berhasil");
       setActiveTab('dashboard');
-    } catch { showNotif("error", "Kredensial salah"); }
+    } catch { showNotif("error", "Email atau kata sandi salah"); }
     finally { setIsLoading(false); }
   };
 
@@ -168,7 +167,7 @@ const App = () => {
           setProgressCache(prev => ({ ...prev, [targetNim]: currentProg }));
         }
         setActiveTab('input');
-        showNotif("success", `Data ${res?.data?.info?.nama || 'Mahasiswa'} dimuat`);
+        showNotif("success", `Data ${res?.data?.info?.nama || 'Mahasiswa'} berhasil dimuat`);
       } else { showNotif("error", "Mahasiswa tidak ditemukan"); }
     } catch { showNotif("error", "Gagal mengambil data"); }
     finally { setIsLoading(false); }
@@ -198,7 +197,7 @@ const App = () => {
               setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
             }
         }
-        showNotif("success", "Validasi disimpan");
+        showNotif("success", "Verifikasi berhasil disimpan");
       }
     } catch { showNotif("error", "Gagal menyimpan"); }
     finally { setIsLoading(false); }
@@ -218,19 +217,18 @@ const App = () => {
               setProgressCache(prev => ({ ...prev, [activeNim]: newProg }));
             }
         }
-        showNotif("success", "Data dihapus");
+        showNotif("success", "Data berhasil dihapus");
       }
     } catch { showNotif("error", "Gagal menghapus"); }
   };
 
-  // FUNGSI EKSEKUSI RESET (Dijalankan saat pencet "Ya" di Modal)
   const executeResetAll = async () => {
-    setShowResetModal(false); // Tutup modal dulu
+    setShowResetModal(false); 
     
     const itemsToDelete = data.setoran.detail.filter(item => item.sudah_setor);
     
     if (itemsToDelete.length === 0) {
-      return showNotif("info", "Belum ada hafalan yang disetor (sudah 0%)");
+      return showNotif("info", "Belum ada hafalan yang disetor (masih 0%)");
     }
 
     setIsLoading(true);
@@ -269,7 +267,7 @@ const App = () => {
               V
             </div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Login</h1>
-            <p className="text-slate-400 mt-2 font-bold uppercase text-[10px] tracking-[0.3em]">monitoring hafalan mahasiswa</p>
+            <p className="text-slate-400 mt-2 font-bold uppercase text-[10px] tracking-[0.3em]">Pemantauan Hafalan Mahasiswa</p>
           </div>
 
           <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-violet-100 border border-violet-50 space-y-8">
@@ -285,7 +283,7 @@ const App = () => {
             </div>
 
             <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-500 ml-1">Password</label>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-500 ml-1">Kata Sandi</label>
               <input
                 type="password"
                 placeholder="••••••••"
@@ -311,7 +309,6 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#F8F7FF] flex flex-col lg:flex-row font-sans">
-      {/* Notifikasi Toast */}
       {notif && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-10 duration-300">
           <div className={`px-8 py-4 rounded-full shadow-2xl text-white font-black flex items-center gap-3 ${notif.type === 'success' ? 'bg-violet-600' : 'bg-rose-500'}`}>
@@ -321,7 +318,6 @@ const App = () => {
         </div>
       )}
 
-      {/* POP-UP MODAL CUSTOM UNTUK RESET */}
       {showResetModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-violet-100 animate-in zoom-in-95 duration-200">
@@ -330,14 +326,14 @@ const App = () => {
             </div>
             <h3 className="text-xl font-black text-slate-800 text-center mb-2">Reset Hafalan?</h3>
             <p className="text-sm text-slate-500 text-center mb-8 font-medium">
-              Apakah Anda yakin ingin mereset data hafalan ini? Semua progress akan kembali ke 0%.
+              Apakah Anda yakin ingin mereset data hafalan ini? Semua progres akan kembali ke 0%.
             </p>
             <div className="flex gap-3">
               <button 
                 onClick={() => setShowResetModal(false)}
                 className="flex-1 py-4 rounded-xl font-black text-slate-500 bg-slate-50 hover:bg-slate-100 transition-all uppercase text-[10px] tracking-widest"
               >
-                Tidak
+                Batal
               </button>
               <button 
                 onClick={executeResetAll}
@@ -350,7 +346,6 @@ const App = () => {
         </div>
       )}
 
-      {/* Sidebar */}
       <aside className="lg:w-80 p-4 lg:p-6 lg:sticky lg:top-0 lg:h-screen shrink-0 z-20">
         <div className="bg-white rounded-[2rem] lg:rounded-[3rem] shadow-sm border border-violet-50 flex flex-col p-5 lg:p-8 h-auto lg:h-full">
           <div className="flex items-center gap-4 mb-6 lg:mb-14 shrink-0">
@@ -362,20 +357,19 @@ const App = () => {
           </div>
 
           <nav className="flex flex-row lg:flex-col gap-3 overflow-x-auto lg:overflow-visible pr-2 lg:pr-0 pb-2 lg:pb-0 custom-scrollbar shrink-0">
-            <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutGrid size={20}/>} label="Overview" />
+            <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutGrid size={20}/>} label="Beranda" />
             <NavBtn active={activeTab === 'input'} onClick={() => setActiveTab('input')} icon={<Fingerprint size={20}/>} label="Verifikasi" />
-            <NavBtn active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={<GraduationCap size={20}/>} label="Students" />
+            <NavBtn active={activeTab === 'data'} onClick={() => setActiveTab('data')} icon={<GraduationCap size={20}/>} label="Mahasiswa" />
           </nav>
 
           <div className="mt-4 lg:mt-auto pt-4 lg:pt-6 shrink-0 border-t border-slate-50">
             <button onClick={() => setToken("")} className="flex items-center justify-center lg:justify-start gap-4 w-full p-4 lg:p-5 text-slate-400 hover:text-rose-500 transition-all font-black text-sm bg-slate-50 lg:bg-transparent rounded-2xl lg:rounded-none">
-              <Power size={20} /> Logout
+              <Power size={20} /> Keluar
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 p-4 lg:p-6 flex flex-col gap-6 w-full max-w-full">
         <header className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-6 rounded-[2.5rem] border border-violet-50 shadow-sm shrink-0">
           <div className="flex items-center bg-slate-50 rounded-2xl px-6 py-4 w-full max-lg border-2 border-transparent focus-within:border-violet-100 focus-within:bg-white transition-all">
@@ -407,11 +401,11 @@ const App = () => {
               <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-[3rem] lg:rounded-[3.5rem] p-8 lg:p-14 text-white relative overflow-hidden shadow-2xl">
                 <BookMarked className="absolute -right-16 -bottom-16 opacity-10 rotate-12" size={300} />
                 <h2 className="text-4xl lg:text-5xl font-black mb-4 lg:mb-6 leading-tight">Sistem Validasi<br/>Hafalan Quran</h2>
-                <p className="text-violet-100 text-lg lg:text-xl max-w-lg font-medium">Monitoring progres bimbingan mahasiswa UIN SUSKA secara real-time dan terukur.</p>
+                <p className="text-violet-100 text-lg lg:text-xl max-w-lg font-medium">Memantau progres bimbingan mahasiswa UIN SUSKA secara langsung dan terukur.</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
                 <StatCard label="Total Bimbingan" value={mahasiswaBimbingan.length} icon={<GraduationCap />} />
-                <StatCard label="Sistem Status" value="Online" icon={<ShieldCheck />} color="text-emerald-500" />
+                <StatCard label="Status Sistem" value="Online" icon={<ShieldCheck />} color="text-emerald-500" />
                 <StatCard label="Target Prodi" value="Juz 30" icon={<Target />} />
               </div>
             </div>
@@ -431,7 +425,7 @@ const App = () => {
                       
                       <div className="mt-5 w-full md:w-64">
                         <div className="flex justify-between items-end mb-2">
-                          <span className="text-[10px] font-black text-violet-500 uppercase tracking-widest">Current Progress</span>
+                          <span className="text-[10px] font-black text-violet-500 uppercase tracking-widest">Progres Saat Ini</span>
                           <span className="text-xl font-black text-slate-800">{calculateProgress(data.setoran.detail)}%</span>
                         </div>
                         <div className="h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
@@ -452,7 +446,6 @@ const App = () => {
                       Kembali
                     </button>
                     
-                    {/* TOMBOL INI SEKARANG MEMANGGIL CUSTOM MODAL */}
                     <button 
                       onClick={() => setShowResetModal(true)}
                       disabled={isLoading}
@@ -517,7 +510,7 @@ const App = () => {
               </div>
 
               {loadingBimbingan && mahasiswaBimbingan.length === 0 ? (
-                <div className="p-20 lg:p-32 text-center text-slate-300 font-black uppercase text-xs">Loading Data...</div>
+                <div className="p-20 lg:p-32 text-center text-slate-300 font-black uppercase text-xs">Memuat Data...</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6 lg:gap-8 pb-10">
                   {mahasiswaBimbingan.map((mhs) => {
@@ -543,7 +536,7 @@ const App = () => {
                         
                         <div className="mt-8 space-y-3">
                           <div className="flex justify-between items-end">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Progress</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Progres</span>
                             <span className="text-lg font-black text-violet-600">
                                 {progressCache[nimMhs] === undefined ? "..." : `${displayProgress}%`}
                             </span>
